@@ -1,0 +1,86 @@
+import hashlib  
+import random  
+import mysql.connector
+
+conn = mysql.connector.connect(
+    host='localhost',
+    user='root',  # Replace with your database username
+    password='Mysql',  # Replace with your database password
+    database='library'  # Replace with your database name
+) 
+cursor = conn.cursor()
+
+# Create table if not exists
+cursor.execute('''CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(255) UNIQUE, 
+    password_hash VARCHAR(64),
+    salt VARCHAR(16)
+)''') 
+conn.commit() 
+
+def hash_password(password):
+    
+    salt = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789', k=16))  
+    hashed_password = hashlib.sha256((password + salt).encode()).hexdigest()
+    return hashed_password, salt  
+
+def register_user(username, password): 
+    hashed_password, salt = hash_password(password)
+    cursor.execute("INSERT INTO users (username, password_hash, salt) VALUES (%s, %s, %s)", (username, hashed_password, salt))
+    conn.commit() 
+
+def authenticate_user(username, password):
+    cursor.execute("SELECT password_hash, salt FROM users WHERE username = %s", (username,))
+    result = cursor.fetchone()
+    if result:
+        stored_hash, salt = result
+        hashed_password = hashlib.sha256((password + salt).encode()).hexdigest()
+        return stored_hash == hashed_password 
+    return False
+
+def login(username, password):
+    
+    if authenticate_user(username, password):
+        session_id = generate_session_id()
+        return "Login successful", session_id
+    else:
+        return "Invalid credentials", None  
+
+def generate_session_id(): 
+    return ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789', k=32)) 
+
+
+while True:
+    action = input("Do you want to (register/login/exit)? ").strip().lower()
+    
+    if action == 'register':
+        while True:
+            username = input("Enter username to register: ")
+            password = input("Enter password: ")
+            register_user(username, password)
+            
+            another = input("Do you want to register another user? (yes/no): ").strip().lower()
+            if another != 'yes':
+                break  # Exiting the registration loop
+
+    elif action == 'login':
+        username = input("Enter username: ")
+        password = input("Enter password: ")
+        login_message, session_id = login(username, password)
+        print(login_message)
+        
+        if login_message == "Login successful":
+            print(f"Session ID: {session_id}")
+
+
+    elif action == 'exit':
+        print("Exiting the system.")
+        break
+    
+    else:
+        print("Invalid action. Please choose again.")
+
+# Closing the database connection when done
+cursor.close()
+conn.close()
